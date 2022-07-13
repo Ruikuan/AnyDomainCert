@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-ConcurrentDictionary<string, Lazy<X509Certificate2>> _certificates = new ConcurrentDictionary<string, Lazy<X509Certificate2>>();
+ConcurrentDictionary<string, X509Certificate2> _certificates = new ConcurrentDictionary<string, X509Certificate2>();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,7 +12,7 @@ builder.WebHost.ConfigureKestrel(options =>
     {
         httpsOptions.ServerCertificateSelector = (context, subjectName) =>
         {
-            var myCert = _certificates.GetOrAdd(subjectName!, (domain) => new Lazy<X509Certificate2>(()=>
+            var myCert = _certificates.GetOrAdd(subjectName!, (domain) => 
             { 
                 var rootCertPath = Path.Combine("../RootCert", "root.pem");
                 var rootKeyPath = Path.Combine("../RootCert", "key.pem");
@@ -51,8 +51,8 @@ builder.WebHost.ConfigureKestrel(options =>
                 
                 return thisCert;
 
-            })).Value;
-            
+            });
+
             return myCert;
         };
     });
