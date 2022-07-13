@@ -40,15 +40,18 @@ builder.WebHost.ConfigureKestrel(options =>
                                 new Oid("1.3.6.1.5.5.7.3.2")
                             },
                             true));
-
                     request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
+
+                    SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder();
+                    sanBuilder.AddDnsName(domain!);
+                    request.CertificateExtensions.Add(sanBuilder.Build());
 
                     Span<byte> bytes = stackalloc byte[4];
                     Random.Shared.NextBytes(bytes);
                     var cert = request.Create(rootCert, DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1), bytes);
                     var certWithKey = cert.CopyWithPrivateKey(rsa);
-                    File.WriteAllBytes($"{domain}.cer", cert.Export(X509ContentType.Cert));
-                    File.WriteAllBytes($"{domain}.pfx", cert.Export(X509ContentType.Pfx));
+                    File.WriteAllBytes($"{domain}.cer", certWithKey.Export(X509ContentType.Cert));
+                    File.WriteAllBytes($"{domain}.pfx", certWithKey.Export(X509ContentType.Pfx));
                     return certWithKey;
                 })).Value;
             }
