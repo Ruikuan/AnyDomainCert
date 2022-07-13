@@ -364,3 +364,4 @@ FodyWeavers.xsd
 RootCert/key.pem
 RootCert/root.cer
 RootCert/root.pem
+AnyDomain/localhost.cer
