@@ -12,54 +12,48 @@ builder.WebHost.ConfigureKestrel(options =>
     {
         httpsOptions.ServerCertificateSelector = (context, subjectName) =>
         {
-            Console.WriteLine(subjectName);
-            try
-            {
-                return _certificates.GetOrAdd(subjectName!, (domain) => new Lazy<X509Certificate2>(()=>
-                { 
+            var myCert = _certificates.GetOrAdd(subjectName!, (domain) => new Lazy<X509Certificate2>(()=>
+            { 
+                var rootCertPath = Path.Combine("../RootCert", "root.pem");
+                var rootKeyPath = Path.Combine("../RootCert", "key.pem");
+                var rootCert = X509Certificate2.CreateFromPemFile(rootCertPath, rootKeyPath); // initialize the root certificate
 
-                    var rootCertPath = Path.Combine("../RootCert", "root.pem");
-                    var rootKeyPath = Path.Combine("../RootCert", "key.pem");
-                    var rootCert = X509Certificate2.CreateFromPemFile(rootCertPath, rootKeyPath);
+                X500DistinguishedNameBuilder dnBuilder = new X500DistinguishedNameBuilder();
+                dnBuilder.AddCommonName(domain!); // add cn=domain to the distinguished name
+                
+                using var rsa = RSA.Create();
 
-                    X500DistinguishedNameBuilder dnBuilder = new X500DistinguishedNameBuilder();
-                    dnBuilder.AddCommonName(domain!);
-                    
-                    using var rsa = RSA.Create();
+                CertificateRequest request = new CertificateRequest(dnBuilder.Build(), rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+                request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false)); // end entity
+                request.CertificateExtensions.Add(new X509KeyUsageExtension(
+                        X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.NonRepudiation | X509KeyUsageFlags.KeyEncipherment,
+                        false));
 
-                    CertificateRequest request = new CertificateRequest(dnBuilder.Build(), rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-                    request.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
-                    request.CertificateExtensions.Add(new X509KeyUsageExtension(
-                            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.NonRepudiation | X509KeyUsageFlags.KeyEncipherment,
-                            false));
+                request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+                        new OidCollection
+                        {
+                            new Oid("1.3.6.1.5.5.7.3.1"), // service authentication
+                            new Oid("1.3.6.1.5.5.7.3.2")  // client authentication
+                        },
+                        true));
+                request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false)); // subject key identifier
 
-                    request.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
-                            new OidCollection
-                            {
-                                new Oid("1.3.6.1.5.5.7.3.1"),
-                                new Oid("1.3.6.1.5.5.7.3.2")
-                            },
-                            true));
-                    request.CertificateExtensions.Add(new X509SubjectKeyIdentifierExtension(request.PublicKey, false));
+                SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder(); // subject alternative name
+                sanBuilder.AddDnsName(domain!);
+                request.CertificateExtensions.Add(sanBuilder.Build());
 
-                    SubjectAlternativeNameBuilder sanBuilder = new SubjectAlternativeNameBuilder();
-                    sanBuilder.AddDnsName(domain!);
-                    request.CertificateExtensions.Add(sanBuilder.Build());
+                Span<byte> bytes = stackalloc byte[4]; // serial number
+                Random.Shared.NextBytes(bytes);
+                var cert = request.Create(rootCert, DateTimeOffset.Now.AddMinutes(-1), DateTimeOffset.Now.AddYears(1), bytes); // sign the certificate
+                var certWithKey = cert.CopyWithPrivateKey(rsa); // if we return certWithKey directly, it won't work.
+                
+                var thisCert = new X509Certificate2(certWithKey.Export(X509ContentType.Pfx)); // don't know why have to use this method to get cert working.
+                
+                return thisCert;
 
-                    Span<byte> bytes = stackalloc byte[4];
-                    Random.Shared.NextBytes(bytes);
-                    var cert = request.Create(rootCert, DateTimeOffset.Now, DateTimeOffset.Now.AddYears(1), bytes);
-                    var certWithKey = cert.CopyWithPrivateKey(rsa);
-                    File.WriteAllBytes($"{domain}.cer", certWithKey.Export(X509ContentType.Cert));
-                    File.WriteAllBytes($"{domain}.pfx", certWithKey.Export(X509ContentType.Pfx));
-                    return certWithKey;
-                })).Value;
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-                throw;
-            }
+            })).Value;
+            
+            return myCert;
         };
     });
 });
