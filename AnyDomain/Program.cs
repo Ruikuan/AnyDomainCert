@@ -47,6 +47,7 @@ builder.WebHost.ConfigureKestrel(options =>
                 using var cert = request.Create(rootCert, DateTimeOffset.Now.AddMinutes(-1), DateTimeOffset.Now.AddYears(1), bytes); // sign the certificate
                 using var certWithKey = cert.CopyWithPrivateKey(rsa); // if we return certWithKey directly, it won't work.
                 
+                // we have to do this trick to workaround SSLStream doesn't support ephemeral keys on Windows.
                 var domainCert = new X509Certificate2(certWithKey.Export(X509ContentType.Pfx)); // don't know why have to use this method to get cert working.
                 
                 return domainCert;
