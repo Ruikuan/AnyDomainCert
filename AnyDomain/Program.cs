@@ -4,6 +4,10 @@ using System.Security.Cryptography.X509Certificates;
 
 ConcurrentDictionary<string, X509Certificate2> _certificates = new ConcurrentDictionary<string, X509Certificate2>();
 
+var rootCertPath = Path.Combine("../RootCert", "root.pem");
+var rootKeyPath = Path.Combine("../RootCert", "key.pem");
+var rootCert = X509Certificate2.CreateFromPemFile(rootCertPath, rootKeyPath); // initialize the root certificate
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -14,10 +18,6 @@ builder.WebHost.ConfigureKestrel(options =>
         {
             var myCert = _certificates.GetOrAdd(subjectName!, (domain) => 
             { 
-                var rootCertPath = Path.Combine("../RootCert", "root.pem");
-                var rootKeyPath = Path.Combine("../RootCert", "key.pem");
-                var rootCert = X509Certificate2.CreateFromPemFile(rootCertPath, rootKeyPath); // initialize the root certificate
-
                 X500DistinguishedNameBuilder dnBuilder = new X500DistinguishedNameBuilder();
                 dnBuilder.AddCommonName(domain!); // add cn=domain to the distinguished name
                 
@@ -44,7 +44,7 @@ builder.WebHost.ConfigureKestrel(options =>
 
                 Span<byte> bytes = stackalloc byte[4]; // serial number
                 Random.Shared.NextBytes(bytes);
-                var cert = request.Create(rootCert, DateTimeOffset.Now.AddMinutes(-1), DateTimeOffset.Now.AddYears(1), bytes); // sign the certificate
+                using var cert = request.Create(rootCert, DateTimeOffset.Now.AddMinutes(-1), DateTimeOffset.Now.AddYears(1), bytes); // sign the certificate
                 var certWithKey = cert.CopyWithPrivateKey(rsa); // if we return certWithKey directly, it won't work.
                 
                 var thisCert = new X509Certificate2(certWithKey.Export(X509ContentType.Pfx)); // don't know why have to use this method to get cert working.
