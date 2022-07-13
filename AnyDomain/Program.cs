@@ -16,7 +16,7 @@ builder.WebHost.ConfigureKestrel(options =>
     {
         httpsOptions.ServerCertificateSelector = (context, subjectName) =>
         {
-            var myCert = _certificates.GetOrAdd(subjectName!, (domain) => 
+            var subjectCert = _certificates.GetOrAdd(subjectName!, (domain) => 
             { 
                 X500DistinguishedNameBuilder dnBuilder = new X500DistinguishedNameBuilder();
                 dnBuilder.AddCommonName(domain!); // add cn=domain to the distinguished name
@@ -45,15 +45,15 @@ builder.WebHost.ConfigureKestrel(options =>
                 Span<byte> bytes = stackalloc byte[4]; // serial number
                 Random.Shared.NextBytes(bytes);
                 using var cert = request.Create(rootCert, DateTimeOffset.Now.AddMinutes(-1), DateTimeOffset.Now.AddYears(1), bytes); // sign the certificate
-                var certWithKey = cert.CopyWithPrivateKey(rsa); // if we return certWithKey directly, it won't work.
+                using var certWithKey = cert.CopyWithPrivateKey(rsa); // if we return certWithKey directly, it won't work.
                 
-                var thisCert = new X509Certificate2(certWithKey.Export(X509ContentType.Pfx)); // don't know why have to use this method to get cert working.
+                var domainCert = new X509Certificate2(certWithKey.Export(X509ContentType.Pfx)); // don't know why have to use this method to get cert working.
                 
-                return thisCert;
+                return domainCert;
 
             });
 
-            return myCert;
+            return subjectCert;
         };
     });
 });
